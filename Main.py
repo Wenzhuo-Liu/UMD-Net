@@ -24,7 +24,7 @@ from torchvision.transforms import *
 from utils.mydata_xu import *
 from ST_GCN.ST_GCN_Block import ST_GCN_18
 # from Swin_TF.swin_transformer import SwinTransformer3D,SwinTransformerBlock3D
-from Fusionlist.AFF_fusion import AFF 
+from Fusion import AFF as RDF
 # from CMT import cmt_s
 # 设置 max_split_size_mb 为256MB
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
@@ -585,8 +585,8 @@ class TotalNet(nn.Module):
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         combined_features = 512
         
-        self.aff_module_for_people_scenes = AFF(channels=512)
-        self.aff_module_for_fused_points = AFF(channels=512)
+        self.aff_module_for_people_scenes = RDF(channels=512)
+        self.aff_module_for_fused_points = RDF(channels=512)
         
         self.fc_split = nn.Linear(combined_features, 256)  # 4 * 64 = 256
         self.fc_fused = nn.Linear(combined_features, 256)  # 4 * 64 = 256
@@ -1699,7 +1699,7 @@ def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTran
 if __name__ == "__main__":
     cuda = True
 
-mode = "test"
+mode = "train"
 print("running...")
 
 if mode == "train":
