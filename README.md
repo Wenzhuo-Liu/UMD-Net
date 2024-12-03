@@ -7,7 +7,7 @@ This repository contains the implementation of the UMD-Net, a unified assistive 
 
 - `Main.py`: The main script for training, validation, and testing the UMD-Net model. Modify the `mode` parameter to switch between `train` (training and validation) and `test` modes.
 - `Crop.ipynb`: A Jupyter Notebook for preprocessing the dataset. This script performs data segmentation and prepares the dataset for training and evaluation.
-- `AFF_fusion.py`: Implementation of the Attention-based Feature Fusion (AFF) module used in the network.
+- `Fusion.py`: Implementation of the RDF module used in the network.
 - `GLI_CAM.py`: Implementation of the Guided Localization and Interpretation (GLI) module.
 - `MS_FRF.py`: Script for Multi-scale Feature Representation Fusion.
 - `attention/`: Directory containing attention-related modules.
