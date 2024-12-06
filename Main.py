@@ -14,7 +14,7 @@ from torch.autograd import *
 from torch import nn
 from torch.nn import functional as F
 from matplotlib import pyplot as plt
-from GLI_CAM import GLIBlock
+
 import shutil
 import time
 from matplotlib import pyplot as plt
@@ -698,63 +698,70 @@ class TotalNet(nn.Module):
         
 
 
-# VGG16
-class ImageConvNet(nn.Module):
+class GLIBlock(nn.Module):
+    def __init__(self, channels, ratio,gamma = 2, b = 1):
+        super(GLIBlock, self).__init__()
+        self.avg_pooling = nn.AdaptiveAvgPool2d(1)
+        self.max_pooling = nn.AdaptiveMaxPool2d(1)
+        self.fc_layers = nn.Sequential(
+            nn.Linear(in_features = channels, out_features = channels // ratio, bias = False),
+            nn.ReLU(),
+            nn.Linear(in_features = channels // ratio, out_features = channels, bias = False)
+        )
+        kernel_size = int(abs((math.log(channels, 2) + b) / gamma))
+        kernel_size = kernel_size if kernel_size % 2 else kernel_size + 1
+        self.conv = nn.Conv1d(1, 1, kernel_size = kernel_size, padding = (kernel_size - 1) // 2, bias = False)
 
-    def __init__(self):
-        super(ImageConvNet, self).__init__()
-        self.pool = nn.MaxPool2d(2, stride=2)
+        self.cfc = Parameter(torch.Tensor(channels, 2))
+        self.cfc.data.fill_(0)
 
-        self.cnn1 = nn.Conv2d(48, 64, 3, stride=2, padding=1)
-        self.cnn2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.bat10 = nn.BatchNorm2d(64)
-        self.bat11 = nn.BatchNorm2d(64)
+        self.bn = nn.BatchNorm2d(channels)
+        self.activation = nn.Sigmoid()
 
-        self.cnn3 = nn.Conv2d(64, 128, 3, stride=1, padding=1)
-        self.cnn4 = nn.Conv2d(128, 128, 3, padding=1)
-        self.bat20 = nn.BatchNorm2d(128)
-        self.bat21 = nn.BatchNorm2d(128)
+        setattr(self.cfc, 'srm_param', True)
+        setattr(self.bn.weight, 'srm_param', True)
+        setattr(self.bn.bias, 'srm_param', True)
 
-        self.cnn5 = nn.Conv2d(128, 256, 3, stride=1, padding=1)
-        self.cnn6 = nn.Conv2d(256, 256, 3, padding=1)
-        self.bat30 = nn.BatchNorm2d(256)
-        self.bat31 = nn.BatchNorm2d(256)
+        self.sigmoid = nn.Sigmoid()
 
-        self.cnn7 = nn.Conv2d(256, 512, 3, stride=1, padding=1)
-        self.cnn8 = nn.Conv2d(512, 512, 3, padding=1)
-        self.bat40 = nn.BatchNorm2d(512)
-        self.bat41 = nn.BatchNorm2d(512)
+    def _style_integration(self, t):
+        z = t * self.cfc[None, :, :]  # B x C x 2 对应元素相乘
+        z = torch.sum(z, dim=2)[:, :, None, None] # B x C x 1 x 1
 
-        # attention
-        self.SeBlock1 = GLIBlock(64, 16, gamma=2, b=1)
-        self.SeBlock2 = GLIBlock(64, 16, gamma=2, b=1)
-        self.SeBlock3 = GLIBlock(128, 16, gamma=2, b=1)
-        self.SeBlock4 = GLIBlock(128, 16, gamma=2, b=1)
-        self.SeBlock5 = GLIBlock(256, 16, gamma=2, b=1)
-        self.SeBlock6 = GLIBlock(256, 16, gamma=2, b=1)
-        self.SeBlock7 = GLIBlock(512, 16, gamma=2, b=1)
-        self.SeBlock8 = GLIBlock(512, 16, gamma=2, b=1)
+        # z_hat = self.bn(z)
+        g = self.sigmoid(z)
 
+        return g
 
-    def forward(self, inp):
-        c = F.relu(self.SeBlock1(self.bat10(self.cnn1(inp))))
-        c = F.relu(self.SeBlock2(self.bat11(self.cnn2(c))))
-        c = self.pool(c)
+    def forward(self, x, eps=1e-5):
+        b, c, h, w = x.shape # x.shape = torch.Size([8, 512, 14, 14])
 
-        c = F.relu(self.SeBlock3(self.bat20(self.cnn3(c))))
-        c = F.relu(self.SeBlock4(self.bat21(self.cnn4(c))))
-        c = self.pool(c)
+        # 全局最大池化
+        avg_x_fc = self.avg_pooling(x).view(b, c) # [8, 512]
 
-        c = F.relu(self.SeBlock5(self.bat30(self.cnn5(c))))
-        c = F.relu(self.SeBlock6(self.bat31(self.cnn6(c))))
-        c = self.pool(c)
+        # 全局最大池化 + 全局平均池化 + 全局标准差池化(conv1d)
+        avg_x_conv = self.avg_pooling(x) # [8, 512,1,1]
 
-        c = F.relu(self.SeBlock7(self.bat40(self.cnn7(c))))
-        c = F.relu(self.SeBlock8(self.bat41(self.cnn8(c))))
+        # 特征提取层
+        v_fc = self.fc_layers(avg_x_fc)# + self.fc_layers(max_x_fc)  + self.fc_layers(std_x_fc) # [8,512]
+        v_conv = self.conv(avg_x_conv.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)# + self.conv(max_x_conv.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1) + self.conv(std_x_conv.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
+        # [8,512,1,1]
 
-        return c
+        v_x,v_y = v_fc.shape # 8,512
+        v_fc = v_fc.view(v_x,v_y,1) # [8, 512, 1]
+        v_conv = v_conv.view(v_x,v_y,1) # [8, 512, 1]
 
+        # 通道平均池化
+        v_sum = torch.cat((v_fc, v_conv), dim=2)
+        v_sum = self._style_integration(v_sum)
+        # print(v_sum.size()) # [2, 3, 2]
+        # v_sum = (v_fc + v_conv)/2
 
+        # v = self.sigmoid(v_sum) # [8, 512, 1, 1]
+         # [8, 512, 14, 14]
+        return x * v_sum
+
+        
 class ImageConvNet_body(nn.Module):
 
     def __init__(self):
@@ -848,12 +855,6 @@ class ImageConvNet_face(nn.Module):
         self.SeBlock7 = GLIBlock(512, 16, gamma=2, b=1)
         self.SeBlock8 = GLIBlock(512, 16, gamma=2, b=1)
 
-        # self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        #
-        # self.fc1 = nn.Linear(512, 5)
-        # self.fc2 = nn.Linear(512, 7)
-        # self.fc3 = nn.Linear(512, 3)
-        # self.fc4 = nn.Linear(512, 5)
 
     def forward(self, inp):
         c = F.relu(self.SeBlock1(self.bat10(self.cnn1(inp))))
