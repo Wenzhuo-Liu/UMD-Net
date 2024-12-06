@@ -54,9 +54,6 @@ This will evaluate the model's performance on the testing dataset.
 
 The project uses the **AIDE Dataset** for training, validation, and testing. For more information and to access the dataset, search for "AIDE Dataset" online or visit its official repository.
 
-## Contribution
-
-Wenzhuo Liu and Yicheng Qiao contributed equally to this work.
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
