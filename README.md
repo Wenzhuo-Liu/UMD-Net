@@ -7,11 +7,7 @@ This repository contains the implementation of the UMD-Net, a unified assistive 
 
 - `Main.py`: The main script for training, validation, and testing the UMD-Net model. Modify the `mode` parameter to switch between `train` (training and validation) and `test` modes.
 - `Crop.ipynb`: A Jupyter Notebook for preprocessing the dataset. This script performs data segmentation and prepares the dataset for training and evaluation.
-- `Fusion.py`: Implementation of the RDF module used in the network.
 - `requirements.txt`: List of Python dependencies required to run the project.
-- `training.csv`: CSV file containing the training dataset annotations and metadata.
-- `validation.csv`: CSV file containing the validation dataset annotations and metadata.
-- `testing.csv`: CSV file containing the testing dataset annotations and metadata.
 
 ## Requirements
 
